@@ -1,0 +1,40 @@
+add_executable(test_sha1 test_sha1.c)
+target_link_libraries(test_sha1 PRIVATE cwebsocket)
+add_test(NAME sha1_tests COMMAND test_sha1)
+
+add_executable(test_base64 test_base64.c)
+target_link_libraries(test_base64 PRIVATE cwebsocket)
+add_test(NAME base64_tests COMMAND test_base64)
+
+add_executable(test_handshake test_handshake.c)
+target_link_libraries(test_handshake PRIVATE cwebsocket)
+add_test(NAME handshake_tests COMMAND test_handshake)
+
+add_executable(test_frame_parsing test_frame_parsing.c)
+target_link_libraries(test_frame_parsing PRIVATE cwebsocket)
+add_test(NAME frame_parsing_tests COMMAND test_frame_parsing)
+
+add_executable(test_frame_building test_frame_building.c)
+target_link_libraries(test_frame_building PRIVATE cwebsocket)
+add_test(NAME frame_building_tests COMMAND test_frame_building)
+
+add_executable(test_continuation_frames test_continuation_frames.c)
+target_link_libraries(test_continuation_frames PRIVATE cwebsocket)
+add_test(NAME continuation_frame_tests COMMAND test_continuation_frames)
+
+add_executable(test_streaming test_streaming.c)
+target_link_libraries(test_streaming PRIVATE cwebsocket)
+add_test(NAME streaming_tests COMMAND test_streaming)
+
+add_executable(test_streaming_close test_streaming_close.c)
+target_link_libraries(test_streaming_close PRIVATE cwebsocket)
+add_test(NAME streaming_close_tests COMMAND test_streaming_close)
+
+add_executable(test_streaming_echo test_streaming_echo.c)
+target_link_libraries(test_streaming_echo PRIVATE cwebsocket)
+add_test(NAME streaming_echo_tests COMMAND test_streaming_echo)
+
+add_executable(test_x86_server_integration test_x86_server_integration.c)
+target_link_libraries(test_x86_server_integration PRIVATE cwebsocket)
+add_test(NAME x86_server_integration COMMAND test_x86_server_integration)
+
