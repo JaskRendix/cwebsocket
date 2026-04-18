@@ -3,19 +3,18 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-
 #include "../lib/websocket.h"
 
 /* ---- Echo server streaming callbacks ---- */
 
 struct echo_ctx {
-    int client_fd;
+    int     client_fd;
+    int     error;
     uint8_t outbuf[4096];
 };
 
 static void on_begin(uint8_t opcode, size_t total, void *u)
 {
-    /* Nothing to do for echo */
     (void)opcode;
     (void)total;
     (void)u;
@@ -24,17 +23,14 @@ static void on_begin(uint8_t opcode, size_t total, void *u)
 static void on_data(const uint8_t *data, size_t len, void *u)
 {
     struct echo_ctx *ctx = (struct echo_ctx *)u;
-
-    /* Build a TEXT frame for each chunk */
     size_t out_len = sizeof(ctx->outbuf);
     wsMakeFrame(data, len, ctx->outbuf, &out_len, WS_TEXT_FRAME);
-
-    send(ctx->client_fd, ctx->outbuf, out_len, 0);
+    if (send(ctx->client_fd, ctx->outbuf, out_len, 0) < 0)
+        ctx->error = 1;
 }
 
 static void on_end(void *u)
 {
-    /* Nothing to do */
     (void)u;
 }
 
@@ -95,10 +91,10 @@ int main(void)
         /* ---- Parse handshake ---- */
         struct handshake hs;
         nullHandshake(&hs);
-
         enum wsFrameType t = wsParseHandshake(buf, (size_t)n, &hs);
         if (t != WS_OPENING_FRAME) {
             printf("Bad handshake\n");
+            freeHandshake(&hs);
             close(client_fd);
             continue;
         }
@@ -108,11 +104,15 @@ int main(void)
         wsGetHandshakeAnswer(&hs, reply, &reply_len);
         freeHandshake(&hs);
 
-        send(client_fd, reply, reply_len, 0);
+        if (send(client_fd, reply, reply_len, 0) < 0) {
+            close(client_fd);
+            continue;
+        }
 
         /* ---- Streaming callbacks ---- */
         struct echo_ctx ctx = {
-            .client_fd = client_fd
+            .client_fd = client_fd,
+            .error     = 0
         };
 
         struct wsStreamCallbacks cbs = {
@@ -133,11 +133,23 @@ int main(void)
             enum wsFrameType ft =
                 wsParseInputFrameStream(buf, (size_t)r, &cbs);
 
+            if (ft == WS_PING_FRAME) {
+                size_t out_len = sizeof(ctx.outbuf);
+                wsMakeFrame(NULL, 0, ctx.outbuf, &out_len, WS_PONG_FRAME);
+                if (send(client_fd, ctx.outbuf, out_len, 0) < 0)
+                    break;
+                continue;
+            }
+
             if (ft == WS_CLOSING_FRAME) {
-                /* Echo CLOSE */
                 size_t out_len = sizeof(ctx.outbuf);
                 wsMakeFrame(NULL, 0, ctx.outbuf, &out_len, WS_CLOSING_FRAME);
-                send(client_fd, ctx.outbuf, out_len, 0);
+                send(client_fd, ctx.outbuf, out_len, 0); /* best-effort */
+                break;
+            }
+
+            if (ctx.error) {
+                printf("Send error\n");
                 break;
             }
 

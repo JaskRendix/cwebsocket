@@ -38,6 +38,7 @@
 
 struct echo_ctx {
     int      client_fd;
+    int      error;
     uint8_t  outbuf[BUF_LEN];
 };
 
@@ -84,7 +85,8 @@ static void echo_on_data(const uint8_t *data, size_t len, void *user)
 
     size_t out_len = sizeof(ctx->outbuf);
     wsMakeFrame(data, len, ctx->outbuf, &out_len, WS_TEXT_FRAME);
-    safeSend(ctx->client_fd, ctx->outbuf, out_len);
+    if (safeSend(ctx->client_fd, ctx->outbuf, out_len) == EXIT_FAILURE)
+        ctx->error = 1;
 }
 
 static void echo_on_end(void *user)
@@ -133,6 +135,7 @@ static void clientWorker(int clientSocket)
     }
 
     uint8_t reply[1024];
+    _Static_assert(sizeof(reply) >= 256, "reply buffer too small for handshake");
     size_t reply_len = sizeof(reply);
     wsGetHandshakeAnswer(&hs, reply, &reply_len);
     freeHandshake(&hs);
@@ -146,6 +149,7 @@ static void clientWorker(int clientSocket)
 
     struct echo_ctx ctx;
     ctx.client_fd = clientSocket;
+    ctx.error     = 0;
 
     struct wsStreamCallbacks cbs;
     cbs.on_begin = echo_on_begin;
@@ -183,8 +187,11 @@ static void clientWorker(int clientSocket)
             safeSend(clientSocket, ctx.outbuf, out_len);
         }
 
+        if (ctx.error) {
+            break;
+        }
+
         if (ft == WS_ERROR_FRAME) {
-            /* protocol error: send CLOSE and exit */
             size_t out_len = sizeof(ctx.outbuf);
             wsMakeFrame(NULL, 0, ctx.outbuf, &out_len, WS_CLOSING_FRAME);
             safeSend(clientSocket, ctx.outbuf, out_len);

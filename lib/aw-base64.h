@@ -36,6 +36,9 @@ static inline size_t base64len(size_t n) {
     return ((n + 2) / 3) * 4;
 }
 
+/* Compile-time constant version for static array sizing */
+#define BASE64LEN(n) ((((n) + 2) / 3) * 4)
+
 /*
  * Modern, safe Base64 encoder.
  *

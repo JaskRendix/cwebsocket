@@ -34,7 +34,12 @@ add_executable(test_streaming_echo test_streaming_echo.c)
 target_link_libraries(test_streaming_echo PRIVATE cwebsocket)
 add_test(NAME streaming_echo_tests COMMAND test_streaming_echo)
 
+add_executable(x86_server ../x86_server/streaming_echo_server.c)
+target_link_libraries(x86_server PRIVATE cwebsocket)
+
 add_executable(test_x86_server_integration test_x86_server_integration.c)
 target_link_libraries(test_x86_server_integration PRIVATE cwebsocket)
-add_test(NAME x86_server_integration COMMAND test_x86_server_integration)
+add_dependencies(test_x86_server_integration x86_server)
+add_test(NAME x86_server_integration COMMAND test_x86_server_integration
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 

@@ -60,25 +60,24 @@ static size_t make_frame(uint8_t *out,
                          const uint8_t *payload,
                          size_t len)
 {
+    static const uint8_t mask[4] = {0x00, 0x00, 0x00, 0x00};
     size_t p = 0;
-
     out[p++] = (fin ? 0x80 : 0x00) | opcode;
-
     if (len <= 125) {
-        out[p++] = (uint8_t)len;
+        out[p++] = 0x80 | (uint8_t)len;
     } else if (len <= 0xFFFF) {
-        out[p++] = 126;
+        out[p++] = 0x80 | 126;
         out[p++] = (uint8_t)(len >> 8);
         out[p++] = (uint8_t)(len & 0xFF);
     } else {
-        out[p++] = 127;
+        out[p++] = 0x80 | 127;
         uint64_t v = (uint64_t)len;
-        for (int i = 7; i >= 0; i--) {
+        for (int i = 7; i >= 0; i--)
             out[p++] = (uint8_t)((v >> (i * 8)) & 0xFF);
-        }
     }
-
-    memcpy(&out[p], payload, len);
+    memcpy(&out[p], mask, 4);
+    p += 4;
+    memcpy(&out[p], payload, len);  /* all-zero mask = no-op XOR */
     return p + len;
 }
 

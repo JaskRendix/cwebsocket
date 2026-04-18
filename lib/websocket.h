@@ -173,6 +173,9 @@ struct wsStreamCallbacks {
     ws_on_message_data_cb  on_data;
     ws_on_message_end_cb   on_end;
     void *user;
+    /* internal state — zero-initialise, do not touch */
+    uint8_t _opcode;
+    int     _in_progress;
 };
 
 enum wsFrameType

@@ -150,9 +150,8 @@ enum wsFrameType wsParseHandshake(const uint8_t *inputFrame,
         return WS_ERROR_FRAME;
     }
 
-    if (sscanf(inputPtr, "GET %s HTTP/1.1\r\n", hs->resource) != 1) {
-        return WS_ERROR_FRAME;
-    }
+    memcpy(hs->resource, first, resourceLen);
+    hs->resource[resourceLen] = '\0';
 
     /* Move to first header line after request line */
     const char *line = strstr(inputPtr, rn);
@@ -260,7 +259,12 @@ void wsGetHandshakeAnswer(const struct handshake *hs,
 
     /* Build SHA-1 input: key + GUID */
     size_t sha_input_len = key_len + secret_len;
-    char *sha_input = (char *)malloc(sha_input_len);
+    char *sha_input = (char *)malloc(sha_input_len + 1);
+    if (!sha_input) {
+        *outLength = 0;
+        return;
+    }
+    sha_input[sha_input_len] = '\0';
     if (!sha_input) {
         *outLength = 0;
         return;
@@ -275,7 +279,7 @@ void wsGetHandshakeAnswer(const struct handshake *hs,
     free(sha_input);
 
     /* Base64-encode SHA-1 hash */
-    char accept_key[base64len(SHA1_SIZE) + 1];
+    char accept_key[BASE64LEN(SHA1_SIZE) + 1];
     size_t b64_len = base64(accept_key, sizeof(accept_key), shaHash, SHA1_SIZE);
     if (b64_len == 0 || b64_len >= sizeof(accept_key)) {
         *outLength = 0;
@@ -420,7 +424,6 @@ static size_t getPayloadLength(const uint8_t *inputFrame,
     return payloadLength;
 }
 
-/* ---- internal single-frame parser (no continuation support) ---- */
 /* ---- internal single-frame parser (no continuation support) ---- */
 static enum wsFrameType
 wsParseInputFrameSingle(uint8_t *inputFrame,
@@ -589,17 +592,11 @@ wsParseInputFrame(uint8_t *inputFrame,
 
     wsInitMessageContext(&ctx, dummy, sizeof(dummy));
 
-    enum wsFrameType t =
-        wsParseInputFrameWithContext(inputFrame,
-                                     inputLength,
-                                     dataPtr,
-                                     dataLength,
-                                     &ctx);
-
-    if (t == WS_INCOMPLETE_FRAME)
-        return WS_ERROR_FRAME;
-
-    return t;
+    return wsParseInputFrameWithContext(inputFrame,
+                                        inputLength,
+                                        dataPtr,
+                                        dataLength,
+                                        &ctx);
 }
 enum wsFrameType
 wsParseInputFrameStream(uint8_t *inputFrame,
@@ -635,9 +632,16 @@ wsParseInputFrameStream(uint8_t *inputFrame,
         return t;
     }
 
-    /* Data frames */
+    /* Data frames and continuations.
+     *
+     * NOTE: fragmented messages will produce one on_begin per fragment.
+     * Full fragmentation reassembly is not supported in the stream API;
+     * use wsParseInputFrameWithContext for that. */
     if (opcode == WS_TEXT_FRAME || opcode == WS_BINARY_FRAME)
     {
+        cbs->_opcode      = opcode;
+        cbs->_in_progress = !fin;
+
         if (cbs && cbs->on_begin)
             cbs->on_begin(opcode, plen, cbs->user);
 
@@ -650,16 +654,22 @@ wsParseInputFrameStream(uint8_t *inputFrame,
         return t;
     }
 
-    /* Continuation frames */
     if (opcode == 0x00)
     {
         if (cbs && cbs->on_data && plen > 0)
             cbs->on_data(payload, plen, cbs->user);
 
-        if (fin && cbs && cbs->on_end)
-            cbs->on_end(cbs->user);
+        if (fin) {
+            if (cbs && cbs->on_end)
+                cbs->on_end(cbs->user);
+            enum wsFrameType final_type =
+                (cbs->_opcode == WS_TEXT_FRAME)
+                    ? WS_TEXT_FRAME : WS_BINARY_FRAME;
+            cbs->_in_progress = 0;
+            return final_type;
+        }
 
-        return t;
+        return WS_INCOMPLETE_FRAME;
     }
 
     return WS_ERROR_FRAME;
