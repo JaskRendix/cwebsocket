@@ -18,6 +18,10 @@ add_executable(test_frame_building test_frame_building.c)
 target_link_libraries(test_frame_building PRIVATE cwebsocket)
 add_test(NAME frame_building_tests COMMAND test_frame_building)
 
+add_executable(test_consume_continuation test_consume_continuation.c)
+target_link_libraries(test_consume_continuation PRIVATE cwebsocket)
+add_test(NAME consume_continuation_tests COMMAND test_consume_continuation)
+
 add_executable(test_continuation_frames test_continuation_frames.c)
 target_link_libraries(test_continuation_frames PRIVATE cwebsocket)
 add_test(NAME continuation_frame_tests COMMAND test_continuation_frames)

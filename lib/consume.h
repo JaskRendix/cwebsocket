@@ -32,10 +32,10 @@ extern "C" {
  *
  * Returns 0 on unrecoverable protocol error.
  */
-size_t wsConsumeBuffer(uint8_t *buf, size_t bufLen,
-                       struct wsMessageContext *ctx,
-                       ws_on_message_cb on_message, ws_on_control_cb on_control,
-                       void *user);
+intptr_t wsConsumeBuffer(uint8_t *buf, size_t bufLen,
+                         struct wsMessageContext *ctx,
+                         ws_on_message_cb on_message,
+                         ws_on_control_cb on_control, void *user);
 
 #ifdef __cplusplus
 }
