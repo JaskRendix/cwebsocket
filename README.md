@@ -5,7 +5,7 @@ Lightweight, portable WebSocket server library in C, inspired by the original cw
 ## Features
 
 - Pure C implementation  
-- Small codebase  
+- Small, modular codebase  
 - No external dependencies  
 - Server‑side RFC 6455 handshake and framing  
 - Continuation‑frame and fragmented‑message support  
@@ -15,7 +15,7 @@ Lightweight, portable WebSocket server library in C, inspired by the original cw
 
 ## Protocol correctness and portability
 
-The WebSocket protocol implementation has been updated to ensure strict RFC 6455 compliance, predictable behavior, and portability across modern toolchains:
+The implementation is designed for strict RFC 6455 compliance and predictable behavior across modern toolchains:
 
 - Fixed‑width, header‑only SHA‑1 implementation  
 - Bounds‑checked, header‑only Base64 implementation  
@@ -23,20 +23,31 @@ The WebSocket protocol implementation has been updated to ensure strict RFC 64
 - Correct Sec‑WebSocket‑Accept generation  
 - Correct handling of 7‑bit, 16‑bit, and 64‑bit payload lengths  
 - Strict opcode, FIN, and masking validation  
-- Removal of AVR‑specific macros and PROGMEM usage  
 - No implicit declarations or undefined behavior  
 - Warning‑free builds under modern compilers  
 
 The public API remains compatible with the original repository.
 
+## Modular architecture
+
+The original monolithic source file has been split into focused modules:
+
+- `handshake.c` — HTTP Upgrade parsing and response generation  
+- `frame_builder.c` — server and client frame construction  
+- `frame_parser.c` — single‑frame parsing and unmasking  
+- `continuation.c` — fragmented message assembly  
+- `streaming.c` — zero‑copy streaming callbacks  
+- `consume.c` — TCP buffer walker and frame dispatch  
+
+This separation improves readability, testability, and maintainability without altering behavior.
+
 ## Continuation frames and streaming
 
-The library includes full support for incremental and fragmented message processing:
+The library supports incremental and fragmented message processing:
 
 - RFC‑compliant continuation frames  
-- Fragmented message assembly  
-- `wsMessageContext` for message‑assembly state  
-- `wsStreamCallbacks` for zero‑copy streaming  
+- Fragmented message assembly via `wsMessageContext`  
+- Zero‑copy streaming via `wsStreamCallbacks`  
 - Correct CLOSE, PING, and PONG handling  
 - Modernized x86 echo server using the streaming API  
 - Socket‑level integration test  

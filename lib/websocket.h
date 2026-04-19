@@ -107,7 +107,7 @@ enum wsFrameType wsParseHandshake(const uint8_t *inputFrame, size_t inputLength,
 void wsGetHandshakeAnswer(const struct handshake *hs, uint8_t *outFrame,
                           size_t *outLength);
 
-/* -------- Frame building -------- */
+/* ---- Frame building ---- */
 
 /* Build a server-side (unmasked) WebSocket frame from payload */
 void wsMakeFrame(const uint8_t *data, size_t dataLength, uint8_t *outFrame,
@@ -142,13 +142,13 @@ int wsParseCloseFrame(const uint8_t *payload, size_t payloadLen,
                       enum wsCloseCode *outCode, const char **outReason,
                       size_t *outReasonLen);
 
-/* -------- Single-frame parsing -------- */
+/* ---- Single-frame parsing ---- */
 
 /* Parse a WebSocket frame in-place, unmasking payload (stateless) */
 enum wsFrameType wsParseInputFrame(uint8_t *inputFrame, size_t inputLength,
                                    uint8_t **dataPtr, size_t *dataLength);
 
-/* -------- Continuation-frame message assembly -------- */
+/* ---- Continuation-frame message assembly ---- */
 
 struct wsMessageContext {
   uint8_t *buffer;
@@ -177,7 +177,7 @@ enum wsFrameType wsParseInputFrameWithContext(uint8_t *inputFrame,
                                               size_t *dataLength,
                                               struct wsMessageContext *ctx);
 
-/* -------- Streaming callbacks (no buffering) -------- */
+/* ---- Streaming callbacks (no buffering) ---- */
 
 typedef void (*ws_on_message_begin_cb)(uint8_t opcode,
                                        size_t frame_payload_length, void *user);
@@ -207,7 +207,7 @@ enum wsFrameType wsParseInputFrameStream(uint8_t *inputFrame,
                                          size_t inputLength,
                                          struct wsStreamCallbacks *cbs);
 
-/* -------- Buffer consumer (TCP stream integration) -------- */
+/* ---- Buffer consumer (TCP stream integration) ---- */
 
 typedef void (*ws_on_message_cb)(enum wsFrameType type, uint8_t *data,
                                  size_t len, void *user);
