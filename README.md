@@ -1,16 +1,17 @@
 # **cwebsocket**
 
-Lightweight, portable WebSocket server library in C, derived from the original *cwebsocket* project and modernized for strict RFC 6455 compliance, modularity, and testability.
+A lightweight, portable WebSocket server library in C.  
+Modernized for strict RFC 6455 compliance, modularity, and deterministic behavior.
 
 ## **Features**
 
 - Pure C implementation  
-- Small, self‑contained codebase  
 - No external dependencies  
-- Server‑side RFC 6455 handshake and framing  
+- RFC 6455‑compliant handshake and framing  
 - Strict opcode, FIN, RSV, masking, and length validation  
-- Continuation‑frame and fragmented‑message support  
+- Fragmented‑message and continuation‑frame support  
 - Zero‑copy streaming callbacks  
+- Deterministic parsing and error handling  
 - Suitable for embedded and microcontroller targets  
 - MIT license  
 
@@ -18,18 +19,23 @@ Lightweight, portable WebSocket server library in C, derived from the original *
 
 ## **Protocol correctness**
 
-The library implements the core requirements of RFC 6455 and enforces them consistently across the builder, parser, continuation logic, and streaming layer:
+The library enforces the core requirements of RFC 6455 across all modules:
 
-- Correct Sec‑WebSocket‑Accept generation  
-- Correct handling of 7‑bit, 16‑bit, and 64‑bit payload lengths  
-- Validation of 64‑bit lengths (MSB must be zero)  
+- Valid Sec‑WebSocket‑Accept computation  
+- 7‑bit, 16‑bit, and 64‑bit payload length handling  
+- 64‑bit length validation (MSB must be zero)  
 - Mandatory masking for client frames  
 - Rejection of unmasked client frames  
-- Rejection of reserved opcodes  
-- Rejection of non‑zero RSV bits  
+- Rejection of reserved opcodes and non‑zero RSV bits  
 - Control‑frame rules: FIN=1, payload ≤125 bytes  
-- CLOSE frame rules: 2‑byte code + reason ≤123 bytes  
+- CLOSE frame rules: 2‑byte code + optional reason ≤123 bytes  
 - Deterministic continuation‑frame assembly  
+- Strict enforcement of fragmented‑message rules:
+  - Start: FIN=0, opcode=TEXT/BINARY  
+  - Middle: FIN=0, opcode=0x00  
+  - Final: FIN=1, opcode=0x00  
+  - Rejection of illegal continuation starts  
+  - Rejection of illegal new‑data frames during fragmentation  
 - Deterministic streaming behavior with no undefined states  
 
 All modules build warning‑free under modern compilers.
@@ -38,16 +44,17 @@ All modules build warning‑free under modern compilers.
 
 ## **Modular architecture**
 
-The original monolithic source file has been split into focused, testable modules:
+The codebase is organized into focused, testable modules:
 
 - **handshake.c** — HTTP Upgrade parsing and response generation  
-- **frame_builder.c** — server and client frame construction with RFC‑compliant validation  
-- **frame_parser.c** — single‑frame parsing, unmasking, and strict protocol checks  
-- **continuation.c** — fragmented message assembly and continuation‑frame validation  
+- **frame_builder.c** — server and client frame construction with masking and length encoding  
+- **frame_parser.c** — single‑frame parsing, unmasking, opcode/RSV validation, and length checks  
+- **continuation.c** — fragmented‑message assembly and continuation‑frame validation  
 - **streaming.c** — zero‑copy streaming callbacks and incremental frame processing  
-- **consume.c** — TCP buffer walker and frame dispatch  
+- **consume.c** — TCP buffer walker, frame dispatch, and protocol‑error propagation  
+- **base64.c** — corrected Base64 encoder with null termination and bounds checking  
 
-This structure improves clarity, maintainability, and correctness while preserving API compatibility.
+This structure improves clarity, maintainability, and testability.
 
 ---
 
@@ -56,14 +63,13 @@ This structure improves clarity, maintainability, and correctness while preservi
 The library supports incremental and fragmented message processing:
 
 - RFC‑compliant continuation frames  
-- Fragmented message assembly via `wsMessageContext`  
+- Fragmented‑message assembly via `wsMessageContext`  
+- Capacity‑checked buffering  
 - Zero‑copy streaming via `wsStreamCallbacks`  
 - Correct handling of TEXT, BINARY, PING, PONG, and CLOSE  
-- Validation of illegal continuation patterns  
-- Validation of illegal new‑data frames during fragmentation  
-- Capacity‑checked assembly of fragmented messages  
+- Strict validation of illegal continuation patterns  
 
-A modernized x86 echo server demonstrates the streaming API and is covered by an integration test.
+An x86 echo server demonstrates the streaming API and is covered by an integration test.
 
 ---
 
@@ -72,12 +78,13 @@ A modernized x86 echo server demonstrates the streaming API and is covered by an
 The test suite covers:
 
 - SHA‑1  
-- Base64  
+- Base64 (corrected encoder)  
 - Handshake  
 - Frame building  
-- Frame parsing  
+- Frame parsing (opcode, RSV, masking, length validation)  
 - Continuation logic (valid and invalid)  
 - Streaming logic (valid and invalid)  
+- Buffer consumption (multi‑frame, partial frames, protocol errors)  
 - x86 echo server integration  
 
 All tests pass under modern toolchains.
@@ -86,15 +93,13 @@ All tests pass under modern toolchains.
 
 ## **Microcontroller suitability**
 
-The library remains appropriate for embedded and microcontroller environments:
+The library is suitable for embedded environments:
 
 - No dynamic allocation required  
 - No external dependencies  
 - Small code footprint  
 - Deterministic behavior  
 - Configurable buffer ownership  
-
-It can expose device data to a browser through a WebSocket connection with minimal overhead.
 
 ---
 
