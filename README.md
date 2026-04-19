@@ -1,63 +1,104 @@
-# cwebsocket
+# **cwebsocket**
 
-Lightweight, portable WebSocket server library in C, inspired by the original cwebsocket project.
+Lightweight, portable WebSocket server library in C, derived from the original *cwebsocket* project and modernized for strict RFC 6455 compliance, modularity, and testability.
 
-## Features
+## **Features**
 
 - Pure C implementation  
-- Small, modular codebase  
+- Small, self‑contained codebase  
 - No external dependencies  
 - Server‑side RFC 6455 handshake and framing  
+- Strict opcode, FIN, RSV, masking, and length validation  
 - Continuation‑frame and fragmented‑message support  
-- Streaming callbacks for zero‑copy message processing  
+- Zero‑copy streaming callbacks  
 - Suitable for embedded and microcontroller targets  
 - MIT license  
 
-## Protocol correctness and portability
+---
 
-The implementation is designed for strict RFC 6455 compliance and predictable behavior across modern toolchains:
+## **Protocol correctness**
 
-- Fixed‑width, header‑only SHA‑1 implementation  
-- Bounds‑checked, header‑only Base64 implementation  
-- Modern handshake parsing  
+The library implements the core requirements of RFC 6455 and enforces them consistently across the builder, parser, continuation logic, and streaming layer:
+
 - Correct Sec‑WebSocket‑Accept generation  
 - Correct handling of 7‑bit, 16‑bit, and 64‑bit payload lengths  
-- Strict opcode, FIN, and masking validation  
-- No implicit declarations or undefined behavior  
-- Warning‑free builds under modern compilers  
+- Validation of 64‑bit lengths (MSB must be zero)  
+- Mandatory masking for client frames  
+- Rejection of unmasked client frames  
+- Rejection of reserved opcodes  
+- Rejection of non‑zero RSV bits  
+- Control‑frame rules: FIN=1, payload ≤125 bytes  
+- CLOSE frame rules: 2‑byte code + reason ≤123 bytes  
+- Deterministic continuation‑frame assembly  
+- Deterministic streaming behavior with no undefined states  
 
-The public API remains compatible with the original repository.
+All modules build warning‑free under modern compilers.
 
-## Modular architecture
+---
 
-The original monolithic source file has been split into focused modules:
+## **Modular architecture**
 
-- `handshake.c` — HTTP Upgrade parsing and response generation  
-- `frame_builder.c` — server and client frame construction  
-- `frame_parser.c` — single‑frame parsing and unmasking  
-- `continuation.c` — fragmented message assembly  
-- `streaming.c` — zero‑copy streaming callbacks  
-- `consume.c` — TCP buffer walker and frame dispatch  
+The original monolithic source file has been split into focused, testable modules:
 
-This separation improves readability, testability, and maintainability without altering behavior.
+- **handshake.c** — HTTP Upgrade parsing and response generation  
+- **frame_builder.c** — server and client frame construction with RFC‑compliant validation  
+- **frame_parser.c** — single‑frame parsing, unmasking, and strict protocol checks  
+- **continuation.c** — fragmented message assembly and continuation‑frame validation  
+- **streaming.c** — zero‑copy streaming callbacks and incremental frame processing  
+- **consume.c** — TCP buffer walker and frame dispatch  
 
-## Continuation frames and streaming
+This structure improves clarity, maintainability, and correctness while preserving API compatibility.
+
+---
+
+## **Continuation frames and streaming**
 
 The library supports incremental and fragmented message processing:
 
 - RFC‑compliant continuation frames  
 - Fragmented message assembly via `wsMessageContext`  
 - Zero‑copy streaming via `wsStreamCallbacks`  
-- Correct CLOSE, PING, and PONG handling  
-- Modernized x86 echo server using the streaming API  
-- Socket‑level integration test  
+- Correct handling of TEXT, BINARY, PING, PONG, and CLOSE  
+- Validation of illegal continuation patterns  
+- Validation of illegal new‑data frames during fragmentation  
+- Capacity‑checked assembly of fragmented messages  
 
-## Microcontrollers
+A modernized x86 echo server demonstrates the streaming API and is covered by an integration test.
 
-The library remains suitable for microcontroller and embedded use.  
-It can expose device data to a browser through a WebSocket connection with minimal memory overhead.
+---
 
-## Not supported
+## **Testing**
+
+The test suite covers:
+
+- SHA‑1  
+- Base64  
+- Handshake  
+- Frame building  
+- Frame parsing  
+- Continuation logic (valid and invalid)  
+- Streaming logic (valid and invalid)  
+- x86 echo server integration  
+
+All tests pass under modern toolchains.
+
+---
+
+## **Microcontroller suitability**
+
+The library remains appropriate for embedded and microcontroller environments:
+
+- No dynamic allocation required  
+- No external dependencies  
+- Small code footprint  
+- Deterministic behavior  
+- Configurable buffer ownership  
+
+It can expose device data to a browser through a WebSocket connection with minimal overhead.
+
+---
+
+## **Not supported**
 
 - Secure WebSocket (wss)  
 - WebSocket extensions  
@@ -65,7 +106,9 @@ It can expose device data to a browser through a WebSocket connection with minim
 - Cookies and authentication headers  
 - Status codes beyond CLOSE  
 
-## Building
+---
+
+## **Building**
 
 ```
 mkdir build
@@ -74,6 +117,9 @@ cmake ..
 make
 ```
 
-## Reference
+---
 
-Original project: [https://github.com/m8rge/cwebsocket](https://github.com/m8rge/cwebsocket)
+## **Reference**
+
+Original project:  
+[https://github.com/m8rge/cwebsocket](https://github.com/m8rge/cwebsocket)
