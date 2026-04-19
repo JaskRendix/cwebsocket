@@ -40,6 +40,7 @@ static void str_to_lower(char *s) {
 static char *getUptoLinefeed(const char *startFrom) {
   if (!startFrom)
     return NULL;
+
   const char *lf = strstr(startFrom, rn);
   if (!lf)
     return NULL;
@@ -90,6 +91,7 @@ enum wsFrameType wsParseHandshake(const uint8_t *inputFrame, size_t inputLength,
   if (!first)
     return WS_ERROR_FRAME;
   first++;
+
   const char *second = strchr(first, ' ');
   if (!second || second <= first)
     return WS_ERROR_FRAME;
@@ -99,6 +101,7 @@ enum wsFrameType wsParseHandshake(const uint8_t *inputFrame, size_t inputLength,
   hs->resource = malloc(rlen + 1);
   if (!hs->resource)
     return WS_ERROR_FRAME;
+
   memcpy(hs->resource, first, rlen);
   hs->resource[rlen] = '\0';
 
@@ -206,6 +209,7 @@ void wsGetHandshakeAnswer(const struct handshake *hs, uint8_t *outFrame,
   sha1(shaHash, tmp, total);
   free(tmp);
 
+  /* Correct Base64 buffer size: BASE64LEN(20) + 1 = 29 bytes */
   char accept_key[BASE64LEN(SHA1_SIZE) + 1];
   size_t b64 = base64(accept_key, sizeof(accept_key), shaHash, SHA1_SIZE);
   if (b64 == 0 || b64 >= sizeof(accept_key)) {
