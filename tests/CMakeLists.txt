@@ -43,3 +43,14 @@ add_dependencies(test_x86_server_integration x86_server)
 add_test(NAME x86_server_integration COMMAND test_x86_server_integration
          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
+add_executable(test_streaming_invalid test_streaming_invalid.c)
+target_link_libraries(test_streaming_invalid PRIVATE cwebsocket)
+add_test(NAME streaming_invalid_tests COMMAND test_streaming_invalid)
+
+add_executable(test_streaming_invalid_extra test_streaming_invalid_extra.c)
+target_link_libraries(test_streaming_invalid_extra PRIVATE cwebsocket)
+add_test(NAME streaming_invalid_extra_tests COMMAND test_streaming_invalid_extra)
+
+add_executable(test_continuation_invalid_extra test_continuation_invalid_extra.c)
+target_link_libraries(test_continuation_invalid_extra PRIVATE cwebsocket)
+add_test(NAME continuation_invalid_extra COMMAND test_continuation_invalid_extra)
