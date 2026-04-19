@@ -24,9 +24,14 @@ if (ENABLE_SANITIZERS)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${SAN_FLAGS}")
 endif()
 
-# Library sources
+# Library sources (modular layout)
 set(CWEBSOCKET_SOURCES
-    lib/websocket.c
+    lib/handshake.c
+    lib/frame_builder.c
+    lib/frame_parser.c
+    lib/continuation.c
+    lib/streaming.c
+    lib/consume.c
 )
 
 # Create the library
