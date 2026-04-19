@@ -53,6 +53,10 @@ add_test(NAME streaming_invalid_extra_tests COMMAND test_streaming_invalid_extra
 add_executable(x86_server ../x86_server/streaming_echo_server.c)
 target_link_libraries(x86_server PRIVATE cwebsocket)
 
+add_executable(test_ping_pong test_ping_pong.c)
+target_link_libraries(test_ping_pong PRIVATE cwebsocket)
+add_test(NAME ping_pong_tests COMMAND test_ping_pong)
+
 add_executable(test_x86_server_integration test_x86_server_integration.c)
 target_link_libraries(test_x86_server_integration PRIVATE cwebsocket)
 add_dependencies(test_x86_server_integration x86_server)

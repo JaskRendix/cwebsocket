@@ -7,7 +7,8 @@
 
 #define DEBUG
 #define PORT 8088
-#define BUF_LEN 0xFF
+#define BUF_LEN 255  /* Safety margin for headers + payload */
+
 #ifdef DEBUG
   #define __ASSERT_USE_STDERR
 #endif
@@ -16,150 +17,153 @@
 #include <Ethernet.h>
 #include <websocket.h>
 
+/* Network configuration */
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 IPAddress ip(192, 168, 0, 4);
 EthernetServer server(PORT);
 
+/* Redirect printf to Serial */
 int serialWrite(char c, FILE *f) {
   Serial.write(c);
   return 0;
 }
 
-void setup()
-{
+void setup() {
   Ethernet.begin(mac, ip);
   server.begin();
-  #ifdef DEBUG
-    Serial.begin(9600);
-    stdout = stderr = fdevopen(serialWrite, NULL);
-    printf_P(PSTR("Server started. waiting for clients...\n"));
-  #endif
+
+#ifdef DEBUG
+  Serial.begin(9600);
+  stdout = stderr = fdevopen(serialWrite, NULL);
+  printf_P(PSTR("Server started. Waiting for clients...\n"));
+#endif
 }
 
-void sendAndLog(EthernetClient client, const uint8_t *buffer, size_t bufferSize)
-{
-  client.write(buffer, bufferSize);
-  #ifdef DEBUG
-  printf_P(PSTR("out packet:\n"));
-  fwrite(buffer, 1, bufferSize, stdout);
-  printf_P(PSTR("\n"));
-  #endif
-}
-
-void clientWorker(EthernetClient client)
-{
+void clientWorker(EthernetClient client) {
   uint8_t buffer[BUF_LEN];
-  memset(buffer, 0, BUF_LEN);
   size_t readedLength = 0;
-  size_t frameSize = BUF_LEN;
+
   enum wsState state = WS_STATE_OPENING;
+  enum wsFrameType frameType = WS_INCOMPLETE_FRAME;
+
   uint8_t *data = NULL;
   size_t dataSize = 0;
-  enum wsFrameType frameType = WS_INCOMPLETE_FRAME;
+
   struct handshake hs;
   nullHandshake(&hs);
-  
-  #define prepareBuffer frameSize = BUF_LEN; memset(buffer, 0, BUF_LEN);
-  #define initNewFrame frameType = WS_INCOMPLETE_FRAME; readedLength = 0; memset(buffer, 0, BUF_LEN);
-  
-  while (frameType == WS_INCOMPLETE_FRAME && client.connected()) {
-    while (client.available() && readedLength <= BUF_LEN) {
-      buffer[readedLength++] = client.read();
-    }
-    #ifdef DEBUG
-    printf("in packet:\n");
-    fwrite(buffer, 1, readedLength, stdout);
-    printf("\n");
-    #endif
-    assert(readedLength <= BUF_LEN);
 
-    if (state == WS_STATE_OPENING) {
-      frameType = wsParseHandshake(buffer, readedLength, &hs);
-    } else {
-      frameType = wsParseInputFrame(buffer, readedLength, &data, &dataSize);
-    }
-    
-    if ((frameType == WS_INCOMPLETE_FRAME && readedLength == BUF_LEN) || frameType == WS_ERROR_FRAME) {
-      #ifdef DEBUG
-      if (frameType == WS_INCOMPLETE_FRAME)
-        printf_P(PSTR("buffer too small"));
-      else
-        printf_P(PSTR("error in incoming frame\n"));
-    #endif
-      
+  /* Fragmentation reassembly context */
+  struct wsMessageContext ctx;
+  uint8_t msgBuffer[BUF_LEN];
+  wsInitMessageContext(&ctx, msgBuffer, BUF_LEN);
+
+  while (client.connected()) {
+
+    /* 1. Read available bytes */
+    while (client.available() && readedLength < BUF_LEN) {
+      buffer[readedLength++] = client.read();
+
+      /* 2. Try parsing */
       if (state == WS_STATE_OPENING) {
-        prepareBuffer;
-        frameSize = sprintf_P((char *)buffer,
-                            PSTR("HTTP/1.1 400 Bad Request\r\n"
-                            "%s%s\r\n\r\n"),
-                            versionField,
-                            version);
-        sendAndLog(client, buffer, frameSize);
-        break;
+        frameType = wsParseHandshake(buffer, readedLength, &hs);
       } else {
-        prepareBuffer;
-        wsMakeFrame(NULL, 0, buffer, &frameSize, WS_CLOSING_FRAME);
-        sendAndLog(client, buffer, frameSize);
-        state = WS_STATE_CLOSING;
-        initNewFrame;
+        frameType = wsParseInputFrameWithContext(
+            buffer, readedLength, &data, &dataSize, &ctx);
       }
+
+      if (frameType != WS_INCOMPLETE_FRAME)
+        break;
     }
-    
-    if (state == WS_STATE_OPENING) {
-      assert(frameType == WS_OPENING_FRAME);
-      if (frameType == WS_OPENING_FRAME) {
-        // if resource is right, generate answer handshake and send it
-        if (strcmp(hs.resource, "/echo") != 0) {
-          frameSize = sprintf_P((char *)buffer, PSTR("HTTP/1.1 404 Not Found\r\n\r\n"));
-          sendAndLog(client, buffer, frameSize);
-        }
-    
-        prepareBuffer;
-        wsGetHandshakeAnswer(&hs, buffer, &frameSize);
-        freeHandshake(&hs);
-        sendAndLog(client, buffer, frameSize);
+
+    /* 3. Error handling */
+    if (frameType == WS_ERROR_FRAME) {
+#ifdef DEBUG
+      printf_P(PSTR("Protocol error or invalid frame\n"));
+#endif
+      break;
+    }
+
+    /* 4. Handshake */
+    if (state == WS_STATE_OPENING && frameType == WS_OPENING_FRAME) {
+
+      if (strcmp(hs.resource, "/echo") == 0) {
+        size_t outLen = BUF_LEN;
+        wsGetHandshakeAnswer(&hs, buffer, &outLen);
+        client.write(buffer, outLen);
         state = WS_STATE_NORMAL;
-        initNewFrame;
+
+#ifdef DEBUG
+        printf_P(PSTR("Handshake successful\n"));
+#endif
+
+      } else {
+        client.write("HTTP/1.1 404 Not Found\r\n\r\n");
+        break;
       }
-    } else {
-        if (frameType == WS_CLOSING_FRAME) {
-          if (state == WS_STATE_CLOSING) {
-            break;
-          } else {
-            prepareBuffer;
-            wsMakeFrame(NULL, 0, buffer, &frameSize, WS_CLOSING_FRAME);
-            sendAndLog(client, buffer, frameSize);
-            break;
-          }
-        } else if (frameType == WS_TEXT_FRAME) {
-          uint8_t *recievedString = NULL;
-          recievedString = (uint8_t *)malloc(dataSize+1);
-          assert(recievedString);
-          memcpy(recievedString, data, dataSize);
-          recievedString[ dataSize ] = 0;
-          
-          prepareBuffer;
-          wsMakeFrame(recievedString, dataSize, buffer, &frameSize, WS_TEXT_FRAME);
-          free(recievedString);
-          sendAndLog(client, buffer, frameSize);
-          initNewFrame;
-        }
+
+      freeHandshake(&hs);
+      readedLength = 0;
+      frameType = WS_INCOMPLETE_FRAME;
     }
-  } // read/write cycle
-  
+
+    /* 5. WebSocket frame handling */
+    else if (state == WS_STATE_NORMAL && frameType != WS_INCOMPLETE_FRAME) {
+
+      size_t outLen = BUF_LEN;
+
+      switch (frameType) {
+
+        case WS_TEXT_FRAME:
+        case WS_BINARY_FRAME:
+          wsMakeFrame(data, dataSize, buffer, &outLen, frameType);
+          client.write(buffer, outLen);
+          break;
+
+        case WS_PING_FRAME:
+          wsMakePongFrame(data, dataSize, buffer, &outLen);
+          client.write(buffer, outLen);
+#ifdef DEBUG
+          printf_P(PSTR("Ping received, Pong sent\n"));
+#endif
+          break;
+
+        case WS_CLOSING_FRAME:
+          wsMakeFrame(NULL, 0, buffer, &outLen, WS_CLOSING_FRAME);
+          client.write(buffer, outLen);
+          goto disconnect;
+
+        default:
+          break;
+      }
+
+      readedLength = 0;
+      frameType = WS_INCOMPLETE_FRAME;
+    }
+
+    /* Buffer overflow protection */
+    if (readedLength >= BUF_LEN && frameType == WS_INCOMPLETE_FRAME) {
+#ifdef DEBUG
+      printf_P(PSTR("Buffer overflow: Frame too large\n"));
+#endif
+      break;
+    }
+
+    delay(1);
+  }
+
+disconnect:
+#ifdef DEBUG
+  printf_P(PSTR("Closing connection\n"));
+#endif
   client.stop();
 }
 
-void loop()
-{
+void loop() {
   EthernetClient client = server.available();
   if (client) {
-    #ifdef DEBUG
-      printf_P(PSTR("connected\n"));
-    #endif
+#ifdef DEBUG
+    printf_P(PSTR("Client connected\n"));
+#endif
     clientWorker(client);
-    #ifdef DEBUG
-      printf_P(PSTR("disconnected\n"));
-    #endif
   }
 }

@@ -140,3 +140,9 @@ void wsMakeCloseFrame(enum wsCloseCode code, const char *reason,
                 outLength, WS_CLOSING_FRAME);
   }
 }
+
+void wsMakePongFrame(const uint8_t *pingPayload, size_t payloadLen,
+                     uint8_t *outFrame, size_t *outLength) {
+  /* RFC 6455: PONG must echo the PING payload exactly */
+  wsMakeFrame(pingPayload, payloadLen, outFrame, outLength, WS_PONG_FRAME);
+}

@@ -59,6 +59,15 @@ intptr_t wsConsumeBuffer(uint8_t *buf, size_t bufLen,
       payload_len = (size_t)len7;
     }
 
+    /* 1.5 RFC 6455 Section 5.5: Control Frame Validation */
+    uint8_t opcode = frame[0] & 0x0Fu;
+    if (opcode >= 0x08) { /* Control frame */
+      int fin = (frame[0] & 0x80u);
+      if (payload_len > 125 || !fin) {
+        return -1; /* Protocol error */
+      }
+    }
+
     /* 2. Mask bit */
     if (frame[1] & 0x80u)
       header_len += 4;

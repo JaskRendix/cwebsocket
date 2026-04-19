@@ -23,7 +23,24 @@ extern "C" {
 
 #include "aw-base64.h"
 #include "aw-sha1.h"
+#if defined(ARDUINO) || defined(_WIN32)
+
+/* Manual bit‑swap for environments without <netinet/in.h> */
+#ifndef ntohs
+#define ntohs(x)                                                               \
+  ((((uint16_t)(x) & 0xff00) >> 8) | (((uint16_t)(x) & 0x00ff) << 8))
+#endif
+
+#ifndef htons
+#define htons(x) ntohs(x)
+#endif
+
+#else
+
+#include <arpa/inet.h>
 #include <netinet/in.h>
+
+#endif
 
 /* 64‑bit host/network byte order helpers */
 static inline uint64_t htonll(uint64_t x) {
@@ -127,7 +144,8 @@ void wsMakeCloseFrame(enum wsCloseCode code, const char *reason,
 int wsParseCloseFrame(const uint8_t *payload, size_t payloadLen,
                       enum wsCloseCode *outCode, const char **outReason,
                       size_t *outReasonLen);
-
+void wsMakePongFrame(const uint8_t *pingPayload, size_t payloadLen,
+                     uint8_t *outFrame, size_t *outLength);
 /* ---- Frame parsing ---- */
 
 enum wsFrameType wsParseInputFrame(uint8_t *inputFrame, size_t inputLength,
