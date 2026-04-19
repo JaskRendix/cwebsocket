@@ -23,13 +23,7 @@ static void test_small_text_frame(void) {
 
   wsMakeFrame(payload, 2, frame, &outLen, WS_TEXT_FRAME);
 
-  /* Expected:
-     0x81 = FIN=1, TEXT
-     0x02 = payload length
-     'H', 'i'
-  */
   uint8_t expected[] = {0x81, 0x02, 'H', 'i'};
-
   assert(outLen == sizeof(expected));
   assert_bytes(frame, expected, sizeof(expected));
 }
@@ -45,57 +39,13 @@ static void test_16bit_length_frame(void) {
 
   wsMakeFrame(payload, sizeof(payload), frame, &outLen, WS_BINARY_FRAME);
 
-  /* Expected header:
-     0x82 = FIN=1, BINARY
-     0x7E = 126 → 16-bit length follows
-     [2 bytes length big-endian]
-  */
   assert(frame[0] == 0x82);
   assert(frame[1] == 0x7E);
 
   uint16_t len16 = (uint16_t)((frame[2] << 8) | frame[3]);
   assert(len16 == sizeof(payload));
-
-  /* Payload must follow exactly */
   assert(memcmp(&frame[4], payload, sizeof(payload)) == 0);
-
   assert(outLen == 4 + sizeof(payload));
-}
-
-/* Test: 64-bit length frame (127) */
-static void test_64bit_length_frame(void) {
-  uint8_t payload[1] = {0xAB};
-
-  uint8_t frame[64];
-  size_t outLen = sizeof(frame);
-
-  wsMakeFrame(payload, 1, frame, &outLen, WS_BINARY_FRAME);
-
-  /* Force 64-bit by calling wsMakeFrame with >65535? No.
-     Instead: wsMakeFrame uses 64-bit only when >65535.
-     So we manually test correctness of the 64-bit branch by
-     simulating a large length.
-     But for now, test the natural 1-byte case:
-  */
-
-  assert(frame[0] == 0x82);
-  assert(frame[1] == 0x01);
-  assert(frame[2] == 0xAB);
-  assert(outLen == 3);
-}
-
-/* Test: FIN + opcode correctness */
-static void test_opcode_bits(void) {
-  uint8_t payload[] = {0x11, 0x22};
-  uint8_t frame[64];
-  size_t outLen = sizeof(frame);
-
-  wsMakeFrame(payload, 2, frame, &outLen, WS_PING_FRAME);
-
-  assert(frame[0] == (0x80 | WS_PING_FRAME)); /* FIN=1 + opcode */
-  assert(frame[1] == 2);
-  assert(frame[2] == 0x11);
-  assert(frame[3] == 0x22);
 }
 
 /* Test: zero-length payload */
@@ -106,9 +56,46 @@ static void test_zero_length(void) {
   wsMakeFrame(NULL, 0, frame, &outLen, WS_TEXT_FRAME);
 
   uint8_t expected[] = {0x81, 0x00};
-
   assert(outLen == sizeof(expected));
   assert_bytes(frame, expected, sizeof(expected));
+}
+
+/* Test: FIN + opcode correctness */
+static void test_opcode_bits(void) {
+  uint8_t payload[] = {0x11, 0x22};
+  uint8_t frame[64];
+  size_t outLen = sizeof(frame);
+
+  wsMakeFrame(payload, 2, frame, &outLen, WS_PING_FRAME);
+
+  assert(frame[0] == (0x80 | WS_PING_FRAME));
+  assert(frame[1] == 2);
+  assert(frame[2] == 0x11);
+  assert(frame[3] == 0x22);
+}
+
+/* Test: CLOSE code only */
+static void test_close_code_only(void) {
+  uint8_t frame[32];
+  size_t outLen = sizeof(frame);
+
+  wsMakeCloseFrame(WS_CLOSE_NORMAL, NULL, frame, &outLen, NULL);
+
+  assert(frame[0] == 0x88);
+  assert(frame[1] == 0x02);
+  assert(frame[2] == 0x03);
+  assert(frame[3] == 0xE8);
+}
+
+/* Test: masked CLOSE frame */
+static void test_close_masked(void) {
+  uint8_t frame[64];
+  size_t outLen = sizeof(frame);
+  uint8_t mask[4] = {1, 2, 3, 4};
+
+  wsMakeCloseFrame(WS_CLOSE_NORMAL, "X", frame, &outLen, mask);
+
+  assert(frame[1] & 0x80);
 }
 
 int main(void) {
@@ -116,9 +103,10 @@ int main(void) {
 
   test_small_text_frame();
   test_16bit_length_frame();
-  test_64bit_length_frame();
-  test_opcode_bits();
   test_zero_length();
+  test_opcode_bits();
+  test_close_code_only();
+  test_close_masked();
 
   printf("All frame building tests passed.\n");
   return 0;

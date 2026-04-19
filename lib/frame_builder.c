@@ -34,6 +34,16 @@ static size_t writeFrameHeader(uint8_t *outFrame, uint8_t firstByte,
   return offset;
 }
 
+static void wsValidateControlFrame(enum wsFrameType frameType,
+                                   size_t dataLength) {
+  if (frameType == WS_PING_FRAME || frameType == WS_PONG_FRAME ||
+      frameType == WS_CLOSING_FRAME) {
+    /* RFC 6455: control frames must not be fragmented and must have <=125 bytes
+     */
+    assert(dataLength <= 125u);
+  }
+}
+
 void wsMakeFrame(const uint8_t *data, size_t dataLength, uint8_t *outFrame,
                  size_t *outLength, enum wsFrameType frameType) {
   assert(outFrame);
@@ -42,8 +52,10 @@ void wsMakeFrame(const uint8_t *data, size_t dataLength, uint8_t *outFrame,
   if (dataLength > 0)
     assert(data);
 
+  wsValidateControlFrame(frameType, dataLength);
+
   size_t header_len = 2;
-  if (dataLength > 125 && dataLength <= 0xFFFFu)
+  if (dataLength > 125u && dataLength <= 0xFFFFu)
     header_len += 2;
   else if (dataLength > 0xFFFFu)
     header_len += 8;
@@ -71,8 +83,10 @@ void wsMakeClientFrame(const uint8_t *data, size_t dataLength,
   if (dataLength > 0)
     assert(data);
 
+  wsValidateControlFrame(frameType, dataLength);
+
   size_t header_len = 2 + 4; /* base + mask */
-  if (dataLength > 125 && dataLength <= 0xFFFFu)
+  if (dataLength > 125u && dataLength <= 0xFFFFu)
     header_len += 2;
   else if (dataLength > 0xFFFFu)
     header_len += 8;
@@ -82,11 +96,9 @@ void wsMakeClientFrame(const uint8_t *data, size_t dataLength,
   uint8_t first = (uint8_t)(0x80u | (uint8_t)frameType);
   size_t offset = writeFrameHeader(outFrame, first, dataLength, 1);
 
-  /* Write masking key */
   memcpy(&outFrame[offset], mask, 4);
   offset += 4;
 
-  /* Write masked payload */
   for (size_t i = 0; i < dataLength; ++i)
     outFrame[offset++] = data[i] ^ mask[i % 4u];
 
@@ -100,12 +112,17 @@ void wsMakeCloseFrame(enum wsCloseCode code, const char *reason,
   assert(outLength);
 
   size_t reason_len = reason ? strlen(reason) : 0;
+
+  /* RFC 6455: control payload <=125, close code uses 2 bytes, reason <=123 */
+  if (code != WS_CLOSE_NO_STATUS && code != WS_CLOSE_ABNORMAL) {
+    assert(reason_len <= 123u);
+  }
+
   size_t payload_len = (code != WS_CLOSE_NO_STATUS && code != WS_CLOSE_ABNORMAL)
                            ? 2 + reason_len
                            : 0;
 
-  /* Build raw payload: 2-byte big-endian code + reason */
-  uint8_t payload[128];
+  uint8_t payload[125];
   assert(payload_len <= sizeof(payload));
 
   if (payload_len >= 2) {

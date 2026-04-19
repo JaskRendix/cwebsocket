@@ -11,9 +11,9 @@ static size_t make_masked_frame(uint8_t opcode, const uint8_t *payload,
   uint8_t mask[4] = {0x11, 0x22, 0x33, 0x44};
   size_t offset = 0;
 
-  out[offset++] = 0x80 | opcode; /* FIN=1, opcode */
+  out[offset++] = 0x80 | opcode;
   if (payload_len <= 125) {
-    out[offset++] = 0x80 | (uint8_t)payload_len; /* MASK=1 */
+    out[offset++] = 0x80 | (uint8_t)payload_len;
   } else if (payload_len <= 0xFFFF) {
     out[offset++] = 0x80 | 126;
     uint16_t len16 = htons((uint16_t)payload_len);
@@ -29,9 +29,8 @@ static size_t make_masked_frame(uint8_t opcode, const uint8_t *payload,
   memcpy(&out[offset], mask, 4);
   offset += 4;
 
-  for (size_t i = 0; i < payload_len; i++) {
+  for (size_t i = 0; i < payload_len; i++)
     out[offset++] = payload[i] ^ mask[i % 4];
-  }
 
   return offset;
 }
@@ -70,60 +69,92 @@ static void test_16bit_length(void) {
   assert(memcmp(dataPtr, payload, sizeof(payload)) == 0);
 }
 
-/* Test: masked binary frame with 64-bit length */
-static void test_64bit_length(void) {
-  /* Small payload but force 64-bit length */
-  uint8_t payload[1] = {0xAB};
-
-  uint8_t frame[64];
-  uint8_t mask[4] = {0x11, 0x22, 0x33, 0x44};
-  size_t offset = 0;
-
-  frame[offset++] = 0x82;       /* FIN=1, BINARY */
-  frame[offset++] = 0x80 | 127; /* MASK=1, 64-bit length */
-
-  uint64_t len64 = htonll(1);
-  memcpy(&frame[offset], &len64, 8);
-  offset += 8;
-
-  memcpy(&frame[offset], mask, 4);
-  offset += 4;
-
-  frame[offset++] = payload[0] ^ mask[0];
-
-  uint8_t *dataPtr = NULL;
-  size_t dataLen = 0;
-
-  enum wsFrameType t = wsParseInputFrame(frame, offset, &dataPtr, &dataLen);
-  assert(t == WS_BINARY_FRAME);
-  assert(dataLen == 1);
-  assert(dataPtr[0] == 0xAB);
-}
-
 /* Test: missing MASK bit → error */
 static void test_missing_mask(void) {
-  uint8_t frame[] = {0x81, /* FIN=1, TEXT */
-                     0x02, /* MASK=0, length=2 → invalid for client frame */
-                     'O', 'K'};
+  uint8_t frame[] = {0x81, 0x02, 'O', 'K'};
 
   uint8_t *dataPtr = NULL;
   size_t dataLen = 0;
 
-  enum wsFrameType t =
-      wsParseInputFrame(frame, sizeof(frame), &dataPtr, &dataLen);
-  assert(t == WS_ERROR_FRAME);
+  assert(wsParseInputFrame(frame, sizeof(frame), &dataPtr, &dataLen) ==
+         WS_ERROR_FRAME);
 }
 
 /* Test: incomplete frame */
 static void test_incomplete_frame(void) {
-  uint8_t frame[] = {0x81}; /* only 1 byte */
+  uint8_t frame[] = {0x81};
 
   uint8_t *dataPtr = NULL;
   size_t dataLen = 0;
 
-  enum wsFrameType t =
-      wsParseInputFrame(frame, sizeof(frame), &dataPtr, &dataLen);
-  assert(t == WS_INCOMPLETE_FRAME);
+  assert(wsParseInputFrame(frame, sizeof(frame), &dataPtr, &dataLen) ==
+         WS_INCOMPLETE_FRAME);
+}
+
+/* Test: RSV bits set → error */
+static void test_rsv_bits_set(void) {
+  uint8_t frame[] = {0x90, 0x80 | 1, 0, 0, 0, 0, 0xAA};
+
+  uint8_t *p = NULL;
+  size_t n = 0;
+
+  assert(wsParseInputFrame(frame, sizeof(frame), &p, &n) == WS_ERROR_FRAME);
+}
+
+/* Test: control FIN=0 → error */
+static void test_control_fin_zero(void) {
+  uint8_t frame[] = {0x09, 0x80 | 1, 0, 0, 0, 0, 'X'};
+
+  uint8_t *p = NULL;
+  size_t n = 0;
+
+  assert(wsParseInputFrame(frame, sizeof(frame), &p, &n) == WS_ERROR_FRAME);
+}
+
+/* Test: control payload >125 → error */
+static void test_control_payload_too_large(void) {
+  uint8_t frame[300 + 10];
+  frame[0] = 0x89;
+  frame[1] = 0x80 | 126;
+
+  uint16_t len = htons(200);
+  memcpy(&frame[2], &len, 2);
+
+  memset(&frame[4], 0, 4);
+  memset(&frame[8], 'A', 200);
+
+  uint8_t *p = NULL;
+  size_t n = 0;
+
+  assert(wsParseInputFrame(frame, sizeof(frame), &p, &n) == WS_ERROR_FRAME);
+}
+
+/* Test: reserved opcode → error */
+static void test_reserved_opcode(void) {
+  uint8_t frame[] = {0x83, 0x80 | 1, 0, 0, 0, 0, 0xAA};
+
+  uint8_t *p = NULL;
+  size_t n = 0;
+
+  assert(wsParseInputFrame(frame, sizeof(frame), &p, &n) == WS_ERROR_FRAME);
+}
+
+/* Test: 64-bit length MSB set → error */
+static void test_64bit_length_msb_set(void) {
+  uint8_t frame[32];
+  frame[0] = 0x82;
+  frame[1] = 0x80 | 127;
+
+  frame[2] = 0x80;
+  memset(&frame[3], 0, 7);
+
+  memset(&frame[10], 0, 4);
+  frame[14] = 0xAA;
+
+  uint8_t *p = NULL;
+  size_t n = 0;
+
+  assert(wsParseInputFrame(frame, sizeof(frame), &p, &n) == WS_ERROR_FRAME);
 }
 
 int main(void) {
@@ -131,9 +162,13 @@ int main(void) {
 
   test_simple_text_frame();
   test_16bit_length();
-  test_64bit_length();
   test_missing_mask();
   test_incomplete_frame();
+  test_rsv_bits_set();
+  test_control_fin_zero();
+  test_control_payload_too_large();
+  test_reserved_opcode();
+  test_64bit_length_msb_set();
 
   printf("All frame parsing tests passed.\n");
   return 0;

@@ -21,7 +21,6 @@ static size_t getPayloadLength(const uint8_t *inputFrame, size_t inputLength,
   uint8_t len7 = (uint8_t)(inputFrame[1] & 0x7Fu);
   *payloadFieldExtraBytes = 0;
 
-  /* Need enough bytes for extended length fields */
   if ((len7 == 0x7Eu && inputLength < 4) ||
       (len7 == 0x7Fu && inputLength < 10)) {
     *frameType = WS_INCOMPLETE_FRAME;
@@ -75,13 +74,14 @@ enum wsFrameType wsParseInputFrameSingle(uint8_t *inputFrame,
   if ((inputFrame[0] & 0x70u) != 0x00u)
     return WS_ERROR_FRAME;
 
+  uint8_t fin = (uint8_t)((inputFrame[0] & 0x80u) != 0);
   uint8_t opcode = (uint8_t)(inputFrame[0] & 0x0Fu);
 
   /* Client frames MUST be masked */
   if ((inputFrame[1] & 0x80u) != 0x80u)
     return WS_ERROR_FRAME;
 
-  /* Valid opcodes */
+  /* Valid opcodes: text, binary, close, ping, pong, continuation */
   if (opcode != WS_TEXT_FRAME && opcode != WS_BINARY_FRAME &&
       opcode != WS_CLOSING_FRAME && opcode != WS_PING_FRAME &&
       opcode != WS_PONG_FRAME && opcode != 0x00) {
@@ -97,6 +97,13 @@ enum wsFrameType wsParseInputFrameSingle(uint8_t *inputFrame,
   if (frameType == WS_INCOMPLETE_FRAME || frameType == WS_ERROR_FRAME)
     return frameType;
 
+  /* Control frames: FIN must be 1, payload <=125 */
+  if ((opcode == WS_PING_FRAME || opcode == WS_PONG_FRAME ||
+       opcode == WS_CLOSING_FRAME) &&
+      (fin == 0 || payloadLength > 125u)) {
+    return WS_ERROR_FRAME;
+  }
+
   size_t header_and_mask = 2u + (size_t)extra + 4u;
 
   if (header_and_mask + payloadLength > inputLength)
@@ -106,7 +113,6 @@ enum wsFrameType wsParseInputFrameSingle(uint8_t *inputFrame,
   *dataPtr = &inputFrame[2 + extra + 4];
   *dataLength = payloadLength;
 
-  /* Unmask payload in-place */
   for (size_t i = 0; i < *dataLength; ++i)
     (*dataPtr)[i] ^= maskingKey[i % 4u];
 
@@ -119,7 +125,6 @@ enum wsFrameType wsParseInputFrame(uint8_t *inputFrame, size_t inputLength,
   static uint8_t dummy[1];
   struct wsMessageContext ctx;
 
-  /* Dummy context: no continuation support */
   wsInitMessageContext(&ctx, dummy, sizeof(dummy));
 
   return wsParseInputFrameWithContext(inputFrame, inputLength, dataPtr,
